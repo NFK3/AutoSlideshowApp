@@ -8,12 +8,17 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.provider.MediaStore;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.Button;
+
+import java.util.Date;
+import java.util.Timer;
+import java.util.TimerTask;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -23,6 +28,11 @@ public class MainActivity extends AppCompatActivity {
     Cursor cursor; //カーソルのインスタンス:メンバ変数として指定(→クラス全体で使用可）
     ImageView imageView;
     boolean autoflag = true; //autoflag = ture 初期値、再生ON。false 停止ON。
+
+    Timer mTimer;
+    Handler mHandler = new Handler();
+    double mTimerSec = 0.0;
+    Date now = new Date();
 
 
     private static final int PERMISSIONS_REQUEST_CODE = 100;
@@ -53,23 +63,43 @@ public class MainActivity extends AppCompatActivity {
         }
 
         mStartPauseButton.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    if(autoflag){ //再生ON
+            @Override
+            public void onClick(View v) {
+                if(autoflag){ //再生ON
 
-                    getContentsInfoForward();
-                    mStartPauseButton.setText("停止");
-                    autoflag =! autoflag;
+                    if(mTimer == null) {
+                        mTimer = new Timer();
+                        mTimer.schedule(new TimerTask() {
+                            @Override
+                            public void run() {
+                                mTimerSec += 2.0;
 
-                    }else { //再生OFF = 停止ON
+                                mHandler.post(new Runnable() {
+                                    @Override
+                                    public void run() {
 
-                    getContentsInfoBack();
-                    mStartPauseButton.setText("再生");
-                    autoflag =! autoflag;
-
+                                        mStartPauseButton.setText("停止");
+                                        getContentsInfoForward();
+                                        autoflag =! autoflag;
+                                    }
+                                });
+                            }
+                        }, 2000, 2000);
                     }
 
+
+                }else { //再生OFF = 停止ON
+                    if(mTimer != null){
+                        mTimer.cancel();
+                        mTimer = null;
+                    }
+                        mStartPauseButton.setText("再生");
+                        Log.d("ANDROID", "mTimer : " + mTimer);
+                        autoflag =! autoflag;
+
                 }
+
+            }
 
         });
 
