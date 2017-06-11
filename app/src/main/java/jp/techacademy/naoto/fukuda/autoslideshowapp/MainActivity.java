@@ -12,28 +12,28 @@ import android.os.Handler;
 import android.provider.MediaStore;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
+import android.view.Gravity;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.Button;
+import android.widget.Toast;
 
-import java.util.Date;
 import java.util.Timer;
 import java.util.TimerTask;
 
 public class MainActivity extends AppCompatActivity {
 
-    Button mForwardButton;
-    Button mStartPauseButton;
-    Button mBackButton;
+    Button mForwardButton; //進むボタン
+    Button mStartPauseButton; //再生ボタン（＝停止ボタン）
+    Button mBackButton; //戻るボタン
     Cursor cursor; //カーソルのインスタンス:メンバ変数として指定(→クラス全体で使用可）
     ImageView imageView;
-    boolean autoflag = true; //autoflag = ture 初期値、再生ON。false 停止ON。
+    boolean autoFlag = true; //true 再生ON、再生ボタンの文字→停止に変更、進むボタン＆戻るボタン無効化。false 再生OFF。
+    boolean permissionFlag = true; //true ユーザーが外部画像Permission許可。false 未許可。許可する(=trueになる)までボタン使えない。
 
     Timer mTimer;
     Handler mHandler = new Handler();
     double mTimerSec = 0.0;
-    Date now = new Date();
-
 
     private static final int PERMISSIONS_REQUEST_CODE = 100;
 
@@ -51,58 +51,76 @@ public class MainActivity extends AppCompatActivity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             // パーミッションの許可状態を確認する
             if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
-                // 許可されている
+                // 画像取得許可されているので、onCreate実行。
                 getContentsInfo();
             } else {
                 // 許可されていないので許可ダイアログを表示する
                 requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, PERMISSIONS_REQUEST_CODE);
             }
             // Android 5系以下の場合
+
         } else {
             getContentsInfo();
         }
 
+        //1.再生 or 停止ボタンの動作。
         mStartPauseButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if(autoflag){ //再生ON
 
-                    if(mTimer == null) {
-                        mTimer = new Timer();
-                        mTimer.schedule(new TimerTask() {
-                            @Override
-                            public void run() {
-                                mTimerSec += 2.0;
+                if (permissionFlag == false) {
+                    // 画像取得未許可時の例外処理。許可ダイアログを表示する
+                    Log.d("ANDROID", "permissionFlag = " + permissionFlag);
 
-                                mHandler.post(new Runnable() {
-                                    @Override
-                                    public void run() {
+                    requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, PERMISSIONS_REQUEST_CODE);
 
-                                        mStartPauseButton.setText("停止");
-                                        getContentsInfoForward();
-                                        autoflag =! autoflag;
-                                    }
-                                });
-                            }
-                        }, 2000, 2000);
-                    }
+                } else {
+                    //画像取得許可しているので動作。
+                    if (autoFlag) { //再生ON
+
+                        if (mTimer == null) {
+                            mTimer = new Timer();
+                            mTimer.schedule(new TimerTask() {
+                                @Override
+                                public void run() {
+                                    mTimerSec += 2.0;
+
+                                    mHandler.post(new Runnable() {
+                                        @Override
+                                        public void run() {
+
+                                            mStartPauseButton.setText("停止");
+                                            mForwardButton.setEnabled(false);
+                                            mBackButton.setEnabled(false);
+                                            getContentsInfoForward();
+                                            autoFlag = !autoFlag;
+                                        }
+                                    });
+                                }
+                            }, 2000, 2000);
+                            //2000ms　＝ 2秒。
+                        }
 
 
-                }else { //再生OFF = 停止ON
-                    if(mTimer != null){
-                        mTimer.cancel();
-                        mTimer = null;
-                    }
+                    } else { //再生OFF = 停止ON
+                        if (mTimer != null) {
+                            mTimer.cancel();
+                            mTimer = null;
+                        }
                         mStartPauseButton.setText("再生");
+                        mForwardButton.setEnabled(true);
+                        mBackButton.setEnabled(true);
                         Log.d("ANDROID", "mTimer : " + mTimer);
-                        autoflag =! autoflag;
+                        autoFlag = !autoFlag;
+
+                    }
 
                 }
-
             }
 
         });
 
+        //2.進むボタンの動作。
         mForwardButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -111,6 +129,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        //3.戻るボタンの動作。
         mBackButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -125,9 +144,18 @@ public class MainActivity extends AppCompatActivity {
         switch (requestCode) {
             case PERMISSIONS_REQUEST_CODE:
                 if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    permissionFlag = true; //画像処理許可されたのでTrueにする。
+                    Log.d("ANDROID", "許可された。permissionFlag = " +permissionFlag);
                     getContentsInfo();
+                } else{
+                    Toast toast = Toast.makeText(this, "Please allow, if you want to use this app.",
+                            Toast.LENGTH_LONG);
+                    toast.setGravity(Gravity.CENTER_VERTICAL|Gravity.CENTER_VERTICAL,0,0);
+                    toast.show();
+                    permissionFlag = false;
+                    Log.d("ANDROID", "許可されなかった。permissionFlag = " +permissionFlag);
                 }
-                break;
+
             default:
                 break;
         }
@@ -148,38 +176,59 @@ public class MainActivity extends AppCompatActivity {
 
         if (cursor.moveToFirst()) {
 
-            cursor.moveToFirst();
             mStartPauseButton.setText("再生");
             setImageView();
+
             // リファクタリング。複数メソッドで共通する動作は、メソッドにしてしまう。setImageView();
             // indexからIDを取得し、そのIDから画像のURIを取得する
+        } else {
+            Toast toast = Toast.makeText(this, "No image is saved", Toast.LENGTH_LONG);
+            toast.setGravity(Gravity.CENTER_VERTICAL|Gravity.CENTER_VERTICAL,0,0);
+            toast.show();
         }
     }
 
     private void getContentsInfoForward() {
 
-        if (cursor.moveToNext()) {
-            // indexからIDを取得し、そのIDから画像のURIを取得する
-            setImageView();
+        if(permissionFlag == false) {
+            Log.d("ANDROID", "permissionFlag = " +permissionFlag);
+            // 画像取得未許可時の例外処理。許可ダイアログを表示する。
+            requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, PERMISSIONS_REQUEST_CODE);
+
         } else {
-            cursor.moveToFirst();
-            setImageView();
+
+            if (cursor.moveToNext()) {
+                // indexからIDを取得し、そのIDから画像のURIを取得する
+                setImageView();
+            } else {
+                cursor.moveToFirst();
+                setImageView();
+            }
         }
 
     }
 
     private void getContentsInfoBack() {
 
+        if(permissionFlag == false) {
+            Log.d("ANDROID", "permissionFlag = " +permissionFlag);
+            // 画像取得未許可時の例外処理。許可ダイアログを表示する。
+            requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, PERMISSIONS_REQUEST_CODE);
 
-        if (cursor.moveToPrevious()) {
-            setImageView();
         } else {
-            cursor.moveToLast();
-            setImageView();
+
+            if (cursor.moveToPrevious()) {
+                // indexからIDを取得し、そのIDから画像のURIを取得する
+                setImageView();
+            } else {
+                cursor.moveToLast();
+                setImageView();
+            }
         }
+
     }
 
-    private void setImageView() { //Refactaringした。
+    private void setImageView() { //画像表示処理。進む・戻るに共通するのでRefactoringしたもの。
         int fieldIndex = cursor.getColumnIndex(MediaStore.Images.Media._ID);
         Long id = cursor.getLong(fieldIndex);
         Uri imageUri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id);
